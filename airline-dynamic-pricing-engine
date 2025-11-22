@@ -1,0 +1,371 @@
+  End-to-End ML Architecture for Airline Dynamic Pricing
+
+*A complete, production-ready reference architecture for demand forecasting, price elasticity modeling, and revenue optimization.*
+
+
+
+**1. Full Project Architecture**
+
+This solution is a **decision-making pipeline**, not only a data pipeline:
+
+1. **Data Ingestion**
+2. **Feature Engineering + Feature Store**
+3. **Model Training (Demand + Elasticity)**
+4. **Daily Batch Forecasting**
+5. **Scenario Simulation**
+6. **Pricing Optimization Engine**
+7. **APIs + Consumption Layers (BI / Commercial Systems)**
+
+
+
+ **1.1 Architecture Overview**
+
+
+[Data Sources]
+      |
+      v
+[Data Lake / DW]  -->  [Feature Store]
+      |                        |
+      |                        v
+      |                [ML Model Training]
+      |                        |
+      v                        v
+[Forecasting Layer] --> [Optimization Engine]
+                               |
+                               v
+                         [Pricing API]
+                               |
+                               v
+              [Revenue Management System / Internal Portals]
+
+
+ **2. Data Sources**
+
+Typical inputs:
+
+* Flight history (load factor, fares, revenue)
+* Aircraft inventory/capacity
+* Calendar (holidays, events, seasonality)
+* Competitor prices (scraping or API)
+* Customer segmentation (if available)
+* Operational costs (fuel, fees, taxes)
+
+
+
+## **3. Ingestion Layer**
+
+Goals:
+
+* Standardization
+* Data quality validation
+* Reliable pipelines
+
+Tools & practices:
+
+* Airflow orchestration
+* Critical null checks
+* Timestamp validation
+* Outlier detection
+* Git-versioned pipelines
+* Bronze / Silver / Gold tables
+
+
+
+## **4. Feature Engineering & Feature Store**
+
+Example features:
+
+* `days_to_departure`
+* `is_weekend`, `is_holiday`
+* `competitor_price_delta`
+* `historical_load_factor_route_dayofweek`
+* `promo_flag`
+* `booking_curve_position`
+* `route_category`
+
+Benefits of a feature store:
+
+* Consistency between training and production
+* Reusability across models
+
+
+
+## **5. Model Training**
+
+Main blocks:
+
+1. **Demand Forecasting**
+2. **Price Elasticity Models**
+3. **Support Models** (load factor, purchase propensity, etc.)
+
+Model stack:
+
+* XGBoost / LightGBM
+* LSTM (for booking curves)
+* Prophet (seasonality/holidays)
+* Bayesian regressions (elasticity & causal modeling)
+
+
+
+## **6. Daily Forecasting Layer**
+
+Runs daily:
+
+* Load updated features
+* Apply ML models
+* Generates:
+
+  * expected demand
+  * demand distribution
+  * projected load factor
+* Saves predictions
+
+
+
+## **7. Pricing Optimization Engine**
+
+Inputs:
+
+* Price → demand curve
+* Seat capacity
+* Price boundaries (min/max)
+* Business rules
+* Competitor scenarios
+
+Outputs:
+
+* Optimal price recommendation
+* Expected revenue
+* Expected impact on load factor
+
+Techniques:
+
+* Linear / Integer Programming (PuLP, OR-Tools)
+* Nonlinear optimization
+
+
+
+## **8. Exposure & Consumption**
+
+Includes:
+
+* REST API (FastAPI)
+* What-if simulations
+* BI dashboards (Power BI / Tableau / Looker)
+
+
+
+## **9. Repository Structure**
+
+```text
+airline-pricing-ml/
+  ├── data_ingestion/
+  │   └── load_data.py
+  ├── features/
+  │   └── build_features.py
+  ├── models/
+  │   ├── train_demand_model.py
+  │   ├── train_elasticity_model.py
+  │   └── forecast_demand.py
+  ├── optimization/
+  │   └── optimize_pricing.py
+  ├── api/
+  │   └── app.py
+  └── README.md
+
+
+
+
+## **10. Example Scripts**
+
+
+
+### **10.1 `build_features.py`**
+
+
+# features/build_features.py
+import pandas as pd
+
+def add_time_features(df):
+    df["departure_date"] = pd.to_datetime(df["departure_date"])
+    df["booking_date"] = pd.to_datetime(df["booking_date"])
+    df["days_to_departure"] = (df["departure_date"] - df["booking_date"]).dt.days
+    df["day_of_week"] = df["departure_date"].dt.dayofweek
+    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
+    return df
+
+def add_competitor_features(df, competitor_df):
+    merged = df.merge(
+        competitor_df[["flight_id", "departure_date", "competitor_price"]],
+        on=["flight_id", "departure_date"],
+        how="left"
+    )
+    merged["competitor_price_delta"] = merged["competitor_price"] - merged["own_price"]
+    return merged
+
+if __name__ == "__main__":
+    bookings = pd.read_parquet("data/bronze/bookings.parquet")
+    competitor = pd.read_parquet("data/bronze/competitor_prices.parquet")
+
+    df = add_time_features(bookings)
+    df = add_competitor_features(df, competitor)
+
+    df.to_parquet("data/gold/features.parquet", index=False)
+    print("Features saved to data/gold/features.parquet")
+
+
+**10.2 `train_demand_model.py`**
+
+
+# models/train_demand_model.py
+import pandas as pd
+from xgboost import XGBRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+import joblib
+
+FEATURES = [
+    "days_to_departure",
+    "is_weekend",
+    "competitor_price_delta",
+    "own_price",
+    "route_id",
+    "day_of_week"
+]
+
+TARGET = "seats_sold"
+
+def load_data():
+    df = pd.read_parquet("data/gold/features.parquet")
+    return df[df["days_to_departure"].between(0, 90)]
+
+if __name__ == "__main__":
+    df = load_data()
+    X = df[FEATURES]
+    y = df[TARGET]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    model = XGBRegressor(
+        n_estimators=300,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8
+    )
+
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+
+    mae = mean_absolute_error(y_test, preds)
+    print(f"MAE: {mae:.2f}")
+
+    joblib.dump(model, "models/demand_xgb.pkl")
+    print("Model saved to models/demand_xgb.pkl")
+
+
+ **10.3 `forecast_demand.py`**
+
+
+# models/forecast_demand.py
+import pandas as pd
+import joblib
+
+FEATURES = [
+    "days_to_departure",
+    "is_weekend",
+    "competitor_price_delta",
+    "own_price",
+    "route_id",
+    "day_of_week"
+]
+
+if __name__ == "__main__":
+    model = joblib.load("models/demand_xgb.pkl")
+    df = pd.read_parquet("data/gold/features_today.parquet")
+
+    df["predicted_demand"] = model.predict(df[FEATURES])
+    df.to_parquet("data/gold/predicted_demand.parquet", index=False)
+
+    print("Forecasts saved to data/gold/predicted_demand.parquet")
+
+
+ **10.4 `optimize_pricing.py`**
+
+
+# optimization/optimize_pricing.py
+import pandas as pd
+import pulp as pl
+
+def optimize_flight(flight_df, capacity):
+    prices = list(flight_df["price"])
+    demands = dict(zip(prices, flight_df["predicted_demand"]))
+
+    q = pl.LpVariable.dicts("q", prices, lowBound=0)
+
+    prob = pl.LpProblem("RevenueOptimization", pl.LpMaximize)
+    prob += pl.lpSum([p * q[p] for p in prices])
+    prob += pl.lpSum([q[p] for p in prices]) <= capacity
+
+    for p in prices:
+        prob += q[p] <= demands[p]
+
+    prob.solve(pl.PULP_CBC_CMD(msg=False))
+
+    return {
+        "total_revenue": pl.value(prob.objective),
+        "allocation": {p: q[p].varValue for p in prices}
+    }
+
+if __name__ == "__main__":
+    df = pd.read_parquet("data/gold/predicted_demand_by_price.parquet")
+
+    results = []
+    for flight_id, grp in df.groupby("flight_id"):
+        capacity = grp["capacity"].iloc[0]
+        sol = optimize_flight(grp[["price", "predicted_demand"]], capacity)
+
+        best_price = max(
+            sol["allocation"],
+            key=lambda p: sol["allocation"][p] * p if sol["allocation"][p] else 0
+        )
+
+        results.append({
+            "flight_id": flight_id,
+            "best_price": best_price,
+            "expected_revenue": sol["total_revenue"]
+        })
+
+    res_df = pd.DataFrame(results)
+    res_df.to_parquet("data/gold/pricing_recommendations.parquet", index=False)
+
+    print("Pricing recommendations saved.")
+
+
+ **10.5 `api/app.py`**
+
+# api/app.py
+from fastapi import FastAPI
+import pandas as pd
+
+app = FastAPI()
+
+@app.get("/pricing/{flight_id}")
+def get_pricing(flight_id: str):
+    df = pd.read_parquet("data/gold/pricing_recommendations.parquet")
+    row = df[df["flight_id"] == flight_id]
+
+    if row.empty:
+        return {"flight_id": flight_id, "status": "no_recommendation"}
+
+    rec = row.iloc[0]
+    return {
+        "flight_id": flight_id,
+        "recommended_price": rec["best_price"],
+        "expected_revenue": rec["expected_revenue"],
+        "status": "ok"
+    }
+```
+
