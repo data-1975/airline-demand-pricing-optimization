@@ -1,7 +1,7 @@
 
 ---
 
-# **easyJet Demand Forecasting & Dynamic Pricing Engine**
+# **AeroPriceX Demand Forecasting & Dynamic Pricing Engine**
 
 *A full end-to-end machine learning, optimization, and simulation pipeline for airline revenue strategy.*
 
@@ -9,7 +9,7 @@
 
 ## **📌 Overview**
 
-This repository contains a complete implementation of an **end-to-end ML-powered dynamic pricing system** inspired by a real-world case study involving the entry of a low-cost airline (easyJet) into a competitive new market.
+This repository contains a complete implementation of an **end-to-end ML-powered dynamic pricing system** inspired by a real-world case study involving the entry of a low-cost airline (AeroPriceX) into a competitive new market.
 
 The project integrates:
 
@@ -78,8 +78,8 @@ This repository is structured for clarity, reproducibility, and extensibility.
 
 # **📂 Repository Structure**
 
-```
-easyjet-pricing-ml/
+
+AeroPriceX-pricing-ml/
   ├── data_ingestion/
   │   └── load_data.py
   ├── features/
@@ -100,7 +100,6 @@ easyjet-pricing-ml/
   │   └── gold/
   ├── requirements.txt
   └── README.md
-```
 
 ---
 
@@ -181,46 +180,38 @@ Real-time endpoint for:
 
 ### **1. Clone the repository**
 
-```bash
-git clone https://github.com/<your-username>/easyjet-pricing-ml.git
-cd easyjet-pricing-ml
-```
+bash
+git clone https://github.com/<your-username>/AeroPriceX-pricing-ml.git
+cd AeroPriceX-pricing-ml
 
 ### **2. Install dependencies**
 
-```bash
 pip install -r requirements.txt
-```
 
 ### **3. Generate features**
 
-```bash
 python features/build_features.py
-```
 
 ### **4. Train demand model**
 
-```bash
 python models/train_demand_model.py
-```
 
 ### **5. Run daily forecast**
 
-```bash
+
 python models/forecast_demand.py
-```
+
 
 ### **6. Optimize pricing**
 
-```bash
+
 python optimization/optimize_pricing.py
-```
+
 
 ### **7. Start the API**
 
-```bash
+
 uvicorn api.app:app --reload
-```
 
 ---
 
@@ -286,6 +277,6 @@ Feel free to open PRs with:
 
 For questions, discussions, or consulting inquiries:
 
-**Anderson Menezes Bueno**
+**Anderson M. Bueno**
 *Data Scientist — Advanced Analytics, Causal Inference & Optimization*
 
